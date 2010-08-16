@@ -299,7 +299,7 @@ class BasePath(tuple):
     @property
     def isabs(self):
         """ Return whether this path represent an absolute path.
-
+        
         An absolute path is a path whose meaning doesn't change when the
         the current working directory changes.
         
@@ -647,27 +647,36 @@ class BaseDir(BasePath):
         'l': return links as Link objects (otherwise treat as
              the file/directory/etc. it is pointing to)
         'L': skip links, overrides 'l'
+        'o': return unrecognized object as Path objects (otherwise skip)
 
         Special objects (block devices, etc.) are yielded as Path objects.
         """
         dirs = 'd' in mode
         files = 'f' in mode
         skiplinks = 'L' in mode
-        links = 'l' in mode or skiplinks 
+        links = 'l' in mode or skiplinks
+        other = 'o' in mode
         for child in self.children():
-            s = child.stat(usecache=True, followlinks=not links)
+            try:
+                s = child.stat(usecache=True, followlinks=not links)
+            except OSError:
+                if other:
+                    yield child
+                continue
             if s.isdir:
                 child = self._Dir(child)
                 if dirs:
                     yield child
                 for c in child.walk(mode):
                     yield c
-            elif files and s.isfile:
-                yield self._File(child)
-            elif s.islink and skiplinks:
+            elif s.isfile:
+                if files:
+                    yield self._File(child)
                 continue
-            elif s.islink and links:
-                yield self._Link(child)
+            elif s.islink:
+                if links:
+                    yield self._Link(child)
+                continue
             else:
                 # what do you do if it isn't a file, link, or dir?
                 # I think you yield it anyway, as a path
