@@ -11,8 +11,8 @@ from fpath import Dir, Path
 TEMP_DIR = 'temp_fpath_tests'
 NUM_FILES = 10
 NUM_DIRS = 5
-DIR_FMT = '%s/dir%%03i' % TEMP_DIR
-FILE_FMT = '%s/%%03i.txt' % TEMP_DIR
+DIR_FMT = '{0}/dir%03i'.format(TEMP_DIR)
+FILE_FMT = '{0}/%03i.txt'.format(TEMP_DIR)
 
 
 def setup():

@@ -24,6 +24,10 @@ import itertools
 import string
 import shutil
 
+import sys
+if sys.version_info[0] > 2:
+    unicode = str
+
 class Stats(object):
     """A class for managing the properties of a file or directory.
     
@@ -72,7 +76,7 @@ class Stats(object):
     @property
     def mode(self):
         """File permissions"""
-        self._stat().st_mode % 01000
+        self._stat().st_mode % 0o1000
     
     @mode.setter
     def mode(self, mode):
@@ -85,7 +89,8 @@ class Stats(object):
         return (self._stat().st_uid, self._stat().st_gid)
     
     @owner.setter
-    def owner(self, (uid, gid)):
+    def owner(self, ids):
+        (uid, gid) = ids
         os.chown(unicode(self._path), uid, gid)
         self._stat(True)
     
@@ -117,7 +122,8 @@ class Stats(object):
         return (s.st_atime, s.st_mtime)
 
     @amtime.setter
-    def amtime(self, (atime, mtime)):
+    def amtime(self, times):
+        times = (atime, mtime)
         os.utime(unicode(self._path), (atime, mtime))
         self._stat(True)
     
@@ -173,12 +179,12 @@ class BasePath(tuple):
 
         def abspath(self):
             if self.abspath:
-                raise NotImplementedError, 'This root is already absolute'
+                raise NotImplementedError('This root is already absolute')
             else:
-                raise NotImplementedError, 'abspath is abstract'
+                raise NotImplementedError('abspath is abstract')
 
         def __str__(self):
-            raise NotImplementedError, '__str__ is abstract'
+            raise NotImplementedError('__str__ is abstract')
 
         def __cmp__(self, other):
             if isinstance(other, str):
@@ -186,7 +192,7 @@ class BasePath(tuple):
             elif isinstance(other, BasePath._BaseRoot):
                 return cmp(str(self), str(other))
             else:
-                raise TypeError, 'Comparison not defined'
+                raise TypeError('Comparison not defined')
 
         def __hash__(self):
             # This allows path objects to be hashable
@@ -211,7 +217,7 @@ class BasePath(tuple):
     def _parse_str(pathstr):
         # Concrete path classes should implement _parse_str to get a path
         # string and return an iterable over path elements.
-        raise NotImplementedError, '_parse_str is abstract'
+        raise NotImplementedError('_parse_str is abstract')
 
     @classmethod
     def _normalize_elements(cls, elements):
@@ -220,7 +226,7 @@ class BasePath(tuple):
         # that is, curdir elements should be ignored.
         
         for i, element in enumerate(elements):
-            if isinstance(element, basestring):
+            if isinstance(element, str) or isinstance(element, unicode):
                 if element != cls._curdir:
                     if (not element or
                         cls._sep in element or
@@ -233,13 +239,13 @@ class BasePath(tuple):
                             reason = 'cls._sep in element.'
                         elif cls._altsep and cls._altsep in element:
                             reason = 'cls._altsep in element.'
-                        raise ValueError, ("Element %r is invalid: %s"
-                                        % (element, reason))
+                        raise ValueError("Element {0} is invalid: {1}".format(
+                                              element, reason))
                     yield element
             elif i == 0 and isinstance(element, cls._OSBaseRoot):
                 yield element
             else:
-                raise TypeError, "Element %r is of a wrong type" % element
+                raise TypeError("Element {0} is of a wrong type".format(element))
 
     def __new__(cls, arg=None):
         """ Create a new path object.
@@ -259,7 +265,7 @@ class BasePath(tuple):
             return tuple.__new__(cls, arg)
         elif isinstance(arg, cls._OSBaseRoot):
             return tuple.__new__(cls, (arg,))
-        elif isinstance(arg, basestring):
+        elif isinstance(arg, str) or isinstance(arg, unicode):
             return tuple.__new__(cls, cls._parse_str(arg))
         else:
             return tuple.__new__(cls, cls._normalize_elements(arg))
@@ -337,12 +343,12 @@ class BasePath(tuple):
         else:
             other = cls(other)
         if not other.isrel:
-            raise ValueError, "Right operand should be a relative path"
+            raise ValueError("Right operand should be a relative path")
         return cls(itertools.chain(self, other))
 
     def __radd__(self, other):
         if not self.isrel:
-            raise ValueError, "Right operand should be a relative path"
+            raise ValueError("Right operand should be a relative path")
         if not isinstance(other, BasePath):
             other = self.__class__(other)
         return self.__class__(itertools.chain(other, self))
@@ -378,16 +384,18 @@ class BasePath(tuple):
 
     def __mul__(self, *args):
         if not self.isrel:
-            raise ValueError, "Only relative paths can be multiplied"
+            raise ValueError("Only relative paths can be multiplied")
         return self.__class__(tuple.__mul__(self, *args))
 
     def __rmul__(self, *args):
         if not self.isrel:
-            raise ValueError, "Only relative paths can be multiplied"
+            raise ValueError("Only relative paths can be multiplied")
         return self.__class__(tuple.__rmul__(self, *args))
 
     def __eq__(self, other):
         return tuple.__eq__(self, self.__class__(other))
+    def __hash__(self):
+        return tuple.__hash__(self)
     def __ge__(self, other):
         return tuple.__ge__(self, self.__class__(other))
     def __gt__(self, other):
@@ -535,7 +543,7 @@ class BasePath(tuple):
 
     # --- Create/delete operations on directories
 
-    def mkdir(self, mode=0777, all = False):
+    def mkdir(self, mode=0o777, all = False):
         if all:
             os.makedirs(unicode(self), mode)
         else:
@@ -600,7 +608,7 @@ class BaseFile(BasePath):
         """ Set the access/modified times of this file to the current time.
         Create the file if it does not exist.
         """
-        fd = os.open(unicode(self), os.O_WRONLY | os.O_CREAT, 0666)
+        fd = os.open(unicode(self), os.O_WRONLY | os.O_CREAT, 0o666)
         os.close(fd)
         os.utime(unicode(self), None)
 
@@ -609,7 +617,7 @@ class BaseFile(BasePath):
         return open(unicode(self))
 
     def __add__(self, other):
-        raise ValueError, "File objects not supported as left operand"
+        raise ValueError("File objects not supported as left operand")
 
 class BaseDir(BasePath):
     def __repr__(self):
@@ -745,8 +753,7 @@ class PosixPath(BasePath):
             if pathstr.startswith('//') and not pathstr.startswith('///'):
                 # Two initial slashes have application-specific meaning
                 # in POSIX, and it's not supported currently.
-                raise NotImplementedError, \
-                      "Paths with two leading slashes aren't supported."
+                raise NotImplementedError("Paths with two leading slashes aren't supported.")
             yield cls.ROOT
         for element in pathstr.split('/'):
             if element == '' or element == cls._curdir:
@@ -871,7 +878,7 @@ class NTPath(BasePath):
         def __init__(self, letter):
             # Drive letter is normalized - we don't lose any information
             if len(letter) != 1 or letter not in string.letters:
-                raise ValueError, 'Should get one letter'
+                raise ValueError('Should get one letter')
             self._letter = letter.lower()
 
         @property
@@ -880,10 +887,10 @@ class NTPath(BasePath):
             return self._letter
 
         def __str__(self):
-            return '%s:\\' % self.letter
+            return '{1}:\\'.format(self.letter)
 
         def __repr__(self):
-            return 'path.Drive(%r)' % self.letter
+            return 'path.Drive({1!r})'.format(self.letter)
 
         isabs = True
 
@@ -892,7 +899,7 @@ class NTPath(BasePath):
         def __init__(self, letter):
             # Drive letter is normalized - we don't lose any information
             if len(letter) != 1 or letter not in string.letters:
-                raise ValueError, 'Should get one letter'
+                raise ValueError('Should get one letter')
             self._letter = letter.lower()
 
         @property
@@ -901,10 +908,10 @@ class NTPath(BasePath):
             return self._letter
 
         def __str__(self):
-            return '%s:' % self.letter
+            return '{0}:'.format(self.letter)
 
         def __repr__(self):
-            return 'Path.UnrootedDrive(%r)' % self.letter
+            return 'Path.UnrootedDrive({1!r})'.format(self.letter)
 
         isabs = False
 
@@ -930,10 +937,10 @@ class NTPath(BasePath):
             return self._mountpoint
 
         def __str__(self):
-            return '\\\\%s\\%s\\' % (self.host, self.mountpoint)
+            return '\\\\{0}\\{1}\\'.format(self.host, self.mountpoint)
 
         def __repr__(self):
-            return 'Path.UNCRoot(%r, %r)' % (self.host, self.mountpoint)
+            return 'Path.UNCRoot({0!r}, {1!r})'.format(self.host, self.mountpoint)
 
         isabs = True
             
@@ -970,18 +977,17 @@ class NTPath(BasePath):
             if pathstr.startswith('//'):
                 # UNC Path
                 if pathstr.startswith('///'):
-                    raise ValueError, \
-                          "Paths can't start with more than two slashes"
+                    raise ValueError(
+                          "Paths can't start with more than two slashes")
                 index = pathstr.find('/', 2)
                 if index == -1:
-                    raise ValueError, \
-                          "UNC host name should end with a slash"
+                    raise ValueError(
+                          "UNC host name should end with a slash")
                 index2 = index+1
                 while pathstr[index2:index2+1] == '/':
                     index2 += 1
                 if index2 == len(pathstr):
-                    raise ValueError, \
-                          "UNC mount point is empty"
+                    raise ValueError("UNC mount point is empty")
                 index3 = pathstr.find('/', index2)
                 if index3 == -1:
                     index3 = len(pathstr)
@@ -1043,7 +1049,7 @@ elif os.name == 'nt':
     Drive, UnrootedDrive, UNCRoot = Path.Drive, Path.UnrootedDrive, Path.UNCRoot
 
 else:
-    raise NotImplementedError, \
-          "The path object is currently not implemented for OS %r" % os.name
+    raise NotImplementedError(
+          "The path object is currently not implemented for OS %r" % os.name)
 
 __all__ = ('Path','File','Dir','Link','Stats')
