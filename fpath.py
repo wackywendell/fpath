@@ -133,17 +133,7 @@ class Stats(object):
         return self._stat().st_ctime
 
 
-class BasePath(tuple):
-    """ The base, abstract, path type.
-    
-    The OS-specific path types inherit from it.
-    """
-
-    # ----------------------------------------------------------------
-    # We start with methods which don't use system calls - they just
-    # manipulate paths.
-
-    class _BaseRoot(object):
+class _BaseRoot(object):
         """ Represents a start location for a path.
         
         A Root is an object which may be the first element of a path tuple,
@@ -178,7 +168,7 @@ class BasePath(tuple):
         isabs = None
 
         def abspath(self):
-            if self.abspath:
+            if self.isabs:
                 raise NotImplementedError('This root is already absolute')
             else:
                 raise NotImplementedError('abspath is abstract')
@@ -197,6 +187,16 @@ class BasePath(tuple):
         def __hash__(self):
             # This allows path objects to be hashable
             return hash(unicode(self))
+
+class BasePath(tuple):
+    """ The base, abstract, path type.
+    
+    The OS-specific path types inherit from it.
+    """
+
+    # ----------------------------------------------------------------
+    # We start with methods which don't use system calls - they just
+    # manipulate paths.
 
     # _OSBaseRoot should be the base of the OS-specific root classes, which
     # should inherit from _BaseRoot
@@ -711,29 +711,30 @@ BasePath._Dir = BaseDir
 BasePath._File = BaseFile
 BasePath._Link = BaseLink
 
+class _PosixRoot(_BaseRoot):
+    """ Represents the filesystem root (/).
+    
+    There's only one root on posix systems, so this is a singleton.
+    """
+    instance = None
+    def __new__(cls):
+        if cls.instance is None:
+            instance = object.__new__(cls)
+            cls.instance = instance
+        return cls.instance
+    
+    def __str__(self):
+        return '/'
+
+    def __repr__(self):
+        return 'Path.Root'
+
+    isabs = True
+
+
 class PosixPath(BasePath):
     """ Represents POSIX paths. """
     
-    class _PosixRoot(BasePath._BaseRoot):
-        """ Represents the filesystem root (/).
-        
-        There's only one root on posix systems, so this is a singleton.
-        """
-        instance = None
-        def __new__(cls):
-            if cls.instance is None:
-                instance = object.__new__(cls)
-                cls.instance = instance
-            return cls.instance
-        
-        def __str__(self):
-            return '/'
-
-        def __repr__(self):
-            return 'Path.Root'
-
-        isabs = True
-
     _OSBaseRoot = _PosixRoot
 
     ROOT = _PosixRoot()
@@ -836,114 +837,117 @@ PosixPath._Dir = PosixDir
 PosixPath._File = PosixFile
 PosixPath._Link = PosixLink
 
+class _NTBaseRoot(_BaseRoot):
+    """ The base class of all Windows root classes. """
+    pass
+
+class _NTCurRootType(_NTBaseRoot):
+    """ Represents the root of the current working drive.
+    
+    This class is a singleton. It represents the root of the current
+    working drive - paths starting with '\'.
+    """
+    instance = None
+    def __new__(cls):
+        if cls.instance is None:
+            instance = object.__new__(cls)
+            cls.instance = instance
+        return cls.instance
+    
+    def __str__(self):
+        return '\\'
+
+    def __repr__(self):
+        return 'path.CURROOT'
+
+    isabs = False
+
+    def abspath(self):
+        from nt import _getfullpathname
+        return NTPath(_getfullpathname(unicode(self)))
+
+class NTDrive(_NTBaseRoot):
+    """ Represents the root of a specific drive. """
+    def __init__(self, letter):
+        # Drive letter is normalized - we don't lose any information
+        if len(letter) != 1 or letter not in string.letters:
+            raise ValueError('Should get one letter')
+        self._letter = letter.lower()
+
+    @property
+    def letter(self):
+        # We use a property because we want the object to be immutable.
+        return self._letter
+
+    def __str__(self):
+        return '{1}:\\'.format(self.letter)
+
+    def __repr__(self):
+        return 'path.Drive({1!r})'.format(self.letter)
+
+    isabs = True
+
+class NTUnrootedDrive(_NTBaseRoot):
+    """ Represents the current working directory on a specific drive. """
+    def __init__(self, letter):
+        # Drive letter is normalized - we don't lose any information
+        if len(letter) != 1 or letter not in string.letters:
+            raise ValueError('Should get one letter')
+        self._letter = letter.lower()
+
+    @property
+    def letter(self):
+        # We use a property because we want the object to be immutable.
+        return self._letter
+
+    def __str__(self):
+        return '{0}:'.format(self.letter)
+
+    def __repr__(self):
+        return 'Path.UnrootedDrive({1!r})'.format(self.letter)
+
+    isabs = False
+
+    def abspath(self):
+        from nt import _getfullpathname
+        return NTPath(_getfullpathname(unicode(self)))
+
+class NTUNCRoot(_NTBaseRoot):
+    """ Represents a UNC mount point. """
+    def __init__(self, host, mountpoint):
+        # Host and mountpoint are normalized - we don't lose any information
+        self._host = host.lower()
+        self._mountpoint = mountpoint.lower()
+
+    @property
+    def host(self):
+        # We use a property because we want the object to be immutable.
+        return self._host
+
+    @property
+    def mountpoint(self):
+        # We use a property because we want the object to be immutable.
+        return self._mountpoint
+
+    def __str__(self):
+        return '\\\\{0}\\{1}\\'.format(self.host, self.mountpoint)
+
+    def __repr__(self):
+        return 'Path.UNCRoot({0!r}, {1!r})'.format(self.host, self.mountpoint)
+
+    isabs = True
 
 class NTPath(BasePath):
     """ Represents paths on Windows operating systems. """
 
-    class _NTBaseRoot(BasePath._BaseRoot):
-        """ The base class of all Windows root classes. """
-        pass
-
     _OSBaseRoot = _NTBaseRoot
-
-    class _CurRootType(_NTBaseRoot):
-        """ Represents the root of the current working drive.
-        
-        This class is a singleton. It represents the root of the current
-        working drive - paths starting with '\'.
-        """
-        instance = None
-        def __new__(cls):
-            if cls.instance is None:
-                instance = object.__new__(cls)
-                cls.instance = instance
-            return cls.instance
-        
-        def __str__(self):
-            return '\\'
-
-        def __repr__(self):
-            return 'path.CURROOT'
-
-        isabs = False
-
-        def abspath(self):
-            from nt import _getfullpathname
-            return NTPath(_getfullpathname(unicode(self)))
-
-    CURROOT = _CurRootType()
-
-    class Drive(_NTBaseRoot):
-        """ Represents the root of a specific drive. """
-        def __init__(self, letter):
-            # Drive letter is normalized - we don't lose any information
-            if len(letter) != 1 or letter not in string.letters:
-                raise ValueError('Should get one letter')
-            self._letter = letter.lower()
-
-        @property
-        def letter(self):
-            # We use a property because we want the object to be immutable.
-            return self._letter
-
-        def __str__(self):
-            return '{1}:\\'.format(self.letter)
-
-        def __repr__(self):
-            return 'path.Drive({1!r})'.format(self.letter)
-
-        isabs = True
-
-    class UnrootedDrive(_NTBaseRoot):
-        """ Represents the current working directory on a specific drive. """
-        def __init__(self, letter):
-            # Drive letter is normalized - we don't lose any information
-            if len(letter) != 1 or letter not in string.letters:
-                raise ValueError('Should get one letter')
-            self._letter = letter.lower()
-
-        @property
-        def letter(self):
-            # We use a property because we want the object to be immutable.
-            return self._letter
-
-        def __str__(self):
-            return '{0}:'.format(self.letter)
-
-        def __repr__(self):
-            return 'Path.UnrootedDrive({1!r})'.format(self.letter)
-
-        isabs = False
-
-        def abspath(self):
-            from nt import _getfullpathname
-            return NTPath(_getfullpathname(unicode(self)))
-
-    class UNCRoot(_NTBaseRoot):
-        """ Represents a UNC mount point. """
-        def __init__(self, host, mountpoint):
-            # Host and mountpoint are normalized - we don't lose any information
-            self._host = host.lower()
-            self._mountpoint = mountpoint.lower()
-
-        @property
-        def host(self):
-            # We use a property because we want the object to be immutable.
-            return self._host
-
-        @property
-        def mountpoint(self):
-            # We use a property because we want the object to be immutable.
-            return self._mountpoint
-
-        def __str__(self):
-            return '\\\\{0}\\{1}\\'.format(self.host, self.mountpoint)
-
-        def __repr__(self):
-            return 'Path.UNCRoot({0!r}, {1!r})'.format(self.host, self.mountpoint)
-
-        isabs = True
-            
+    
+    CURROOT = _NTCurRootType()
+    
+    Drive = NTDrive
+    UnrootedDrive = NTUnrootedDrive
+    UNCRoot = NTUNCRoot
+    
             
     # Public constants
     _curdir = '.'
@@ -1046,7 +1050,7 @@ if os.name == 'posix':
     Root = Path.ROOT
 elif os.name == 'nt':
     Path, File, Dir, Link = NTPath, NTFile, NTDir, NTLink
-    Drive, UnrootedDrive, UNCRoot = Path.Drive, Path.UnrootedDrive, Path.UNCRoot
+    Drive, UnrootedDrive, UNCRoot = Path.NTDrive, Path.NTUnrootedDrive, Path.NTUNCRoot
 
 else:
     raise NotImplementedError(
