@@ -64,9 +64,9 @@ minimum while still remaining complete.
 
 More Information and Bugs
 =========================
-At the current version (0.5), Posix, Windows, and Mac paths are supported,
-although neither the Windows and Mac versions are fully tested - please report
-any bugs:
+At the current version (0.6), Posix, Windows, and Mac paths are supported,
+and has been tested on both Windows and Linux.
+Please report any bugs:
 http://github.com/wackywendell/fpath
 
 Also available through pypi:
