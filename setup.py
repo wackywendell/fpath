@@ -1,18 +1,27 @@
 from distutils.core import setup
+import os
+
+def getfile(fname):
+    return open(os.path.join(os.path.dirname(__file__), fname))
+
+readme = getfile('README.txt').read()
+
 setup(name='fpath',
-      version='0.1',
+      version='0.5',
       description='Filesystem paths as objects',
       author='Wendell',
       author_email='wackywendell@gmail.com',
       py_modules=['fpath'],
-      classifiers=[
-          'Development Status :: 3 - Alpha',
+      classifiers=[ # available at http://pypi.python.org/pypi?%3Aaction=list_classifiers
+          'Development Status :: 4 - Beta',
           'Intended Audience :: Developers',
           'Topic :: Software Development :: Libraries',
           'Topic :: System :: Filesystems',
-          'License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)'
+          'Operating System :: POSIX',
+          'Operating System :: Microsoft',
+          'License :: OSI Approved :: MIT License'
         ],
-      license='LGPL',
-      long_description=open('README.txt').read()
+      license='MIT',
+      long_description=readme
       )
 
