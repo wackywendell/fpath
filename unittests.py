@@ -24,8 +24,9 @@ class PathManipulation(unittest.TestCase):
             self.assertEqual(a, b)
         
     def test_home_path(self):
-        dir_path = Path('~')
-        self.assertEqual(os.path.expanduser('~'), dir_path.norm())
+        myhome = Path('~').norm()
+        oshome = os.path.expanduser('~')
+        self.assertEqual(myhome, oshome)
 
     def test_dir_init(self):
         dir_path = Path(self.path_str)

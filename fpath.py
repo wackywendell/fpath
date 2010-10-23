@@ -179,7 +179,7 @@ class _BaseRoot(object):
         def __cmp__(self, other):
             if isinstance(other, str):
                 return -1
-            elif isinstance(other, BasePath._BaseRoot):
+            elif isinstance(other, _BaseRoot):
                 return cmp(str(self), str(other))
             else:
                 raise TypeError('Comparison not defined')
@@ -392,20 +392,30 @@ class BasePath(tuple):
             raise ValueError("Only relative paths can be multiplied")
         return self.__class__(tuple.__rmul__(self, *args))
 
+    @classmethod
+    def __getnorm(cls, pth):
+        """Gets a (basically) normalized Path for the object given.
+        If the object can not be made into a path, None is returned."""
+        try:
+            p = cls._Path(pth)
+        except:
+            return None
+        return p.norm(False, False, False)
+    
     def __eq__(self, other):
-        return tuple.__eq__(self, self.__class__(other))
+        return tuple.__eq__(self.norm(False, False, False), self.__getnorm(other))
     def __hash__(self):
         return tuple.__hash__(self)
     def __ge__(self, other):
-        return tuple.__ge__(self, self.__class__(other))
+        return tuple.__ge__(self.norm(False, False, False), self.__getnorm(other))
     def __gt__(self, other):
-        return tuple.__gt__(self, self.__class__(other))
+        return tuple.__gt__(self.norm(False, False, False), self.__getnorm(other))
     def __le__(self, other):
-        return tuple.__le__(self, self.__class__(other))
+        return tuple.__le__(self.norm(False, False, False), self.__getnorm(other))
     def __lt__(self, other):
-        return tuple.__lt__(self, self.__class__(other))
+        return tuple.__lt__(self.norm(False, False, False), self.__getnorm(other))
     def __ne__(self, other):
-        return tuple.__ne__(self, self.__class__(other))
+        return tuple.__ne__(self.norm(False, False, False), self.__getnorm(other))
         
 
     # ----------------------------------------------------------------
@@ -870,9 +880,12 @@ class NTDrive(_NTBaseRoot):
     """ Represents the root of a specific drive. """
     def __init__(self, letter):
         # Drive letter is normalized - we don't lose any information
-        if len(letter) != 1 or letter not in string.letters:
+        letter = unicode(letter)
+        allletters = unicode(string.ascii_letters, 'ascii')
+            # I think you can only use ASCII letters for drive names
+        if len(letter) != 1 or not letter.isalpha():
             raise ValueError('Should get one letter')
-        self._letter = letter.lower()
+        self._letter = letter.upper()
 
     @property
     def letter(self):
@@ -880,10 +893,10 @@ class NTDrive(_NTBaseRoot):
         return self._letter
 
     def __str__(self):
-        return '{1}:\\'.format(self.letter)
+        return '{}:\\'.format(self.letter)
 
     def __repr__(self):
-        return 'path.Drive({1!r})'.format(self.letter)
+        return 'path.Drive({!r})'.format(self.letter)
 
     isabs = True
 
@@ -1030,7 +1043,16 @@ class NTPath(BasePath):
     def startfile(self):
         return os.startfile(unicode(self))
 
-class NTFile(NTPath, BasePath):
+    def touch(self):
+        """ Set the access/modified times of this file to the current time.
+        Create the file if it does not exist.
+        """
+        fd = os.open(unicode(self), os.O_WRONLY | os.O_CREAT)
+        os.close(fd)
+        os.utime(unicode(self), None)
+    
+
+class NTFile(NTPath, BaseFile):
     pass
 
 class NTDir(NTPath, BaseDir):
@@ -1050,7 +1072,7 @@ if os.name == 'posix':
     Root = Path.ROOT
 elif os.name == 'nt':
     Path, File, Dir, Link = NTPath, NTFile, NTDir, NTLink
-    Drive, UnrootedDrive, UNCRoot = Path.NTDrive, Path.NTUnrootedDrive, Path.NTUNCRoot
+    Drive, UnrootedDrive, UNCRoot = NTDrive, NTUnrootedDrive, NTUNCRoot
 
 else:
     raise NotImplementedError(
