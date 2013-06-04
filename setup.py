@@ -7,7 +7,7 @@ def getfile(fname):
 readme = getfile('README.txt').read()
 
 setup(name='fpath',
-      version='0.5',
+      version='0.6',
       description='Filesystem paths as objects',
       author='Wendell',
       author_email='wackywendell@gmail.com',

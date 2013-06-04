@@ -904,9 +904,12 @@ class NTDrive(_NTBaseRoot):
     """ Represents the root of a specific drive. """
     def __init__(self, letter):
         # Drive letter is normalized - we don't lose any information
-        if len(letter) != 1 or letter not in string.letters:
+        letter = unicode(letter)
+        allletters = unicode(string.ascii_letters, 'ascii')
+            # I think you can only use ASCII letters for drive names
+        if len(letter) != 1 or not letter.isalpha():
             raise ValueError('Should get one letter')
-        self._letter = letter.lower()
+        self._letter = letter.upper()
 
     @property
     def letter(self):
@@ -914,10 +917,10 @@ class NTDrive(_NTBaseRoot):
         return self._letter
 
     def __str__(self):
-        return '{1}:\\'.format(self.letter)
+        return '{}:\\'.format(self.letter)
 
     def __repr__(self):
-        return 'path.Drive({1!r})'.format(self.letter)
+        return 'path.Drive({!r})'.format(self.letter)
 
     isabs = True
 
@@ -1064,7 +1067,16 @@ class NTPath(BasePath):
     def startfile(self):
         return os.startfile(unicode(self))
 
-class NTFile(NTPath, BasePath):
+    def touch(self):
+        """ Set the access/modified times of this file to the current time.
+        Create the file if it does not exist.
+        """
+        fd = os.open(unicode(self), os.O_WRONLY | os.O_CREAT)
+        os.close(fd)
+        os.utime(unicode(self), None)
+    
+
+class NTFile(NTPath, BaseFile):
     pass
 
 class NTDir(NTPath, BaseDir):
@@ -1084,7 +1096,7 @@ if os.name == 'posix':
     Root = Path.ROOT
 elif os.name == 'nt':
     Path, File, Dir, Link = NTPath, NTFile, NTDir, NTLink
-    Drive, UnrootedDrive, UNCRoot = Path.NTDrive, Path.NTUnrootedDrive, Path.NTUNCRoot
+    Drive, UnrootedDrive, UNCRoot = NTDrive, NTUnrootedDrive, NTUNCRoot
 
 else:
     raise NotImplementedError(
