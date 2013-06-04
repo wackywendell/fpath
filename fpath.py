@@ -23,6 +23,8 @@ import stat
 import itertools
 import string
 import shutil
+from datetime import datetime
+from time import mktime
 
 import sys
 if sys.version_info[0] > 2:
@@ -76,7 +78,7 @@ class Stats(object):
     @property
     def mode(self):
         """File permissions"""
-        self._stat().st_mode % 0o1000
+        return self._stat().st_mode % 0o1000
     
     @mode.setter
     def mode(self, mode):
@@ -98,14 +100,22 @@ class Stats(object):
     def size(self):
         """Size in bytes"""
         return self._stat().st_size
-
+    
+    @staticmethod
+    def _totimestamp(dtime):
+        return mktime(dtime.timetuple())
+    
+    @staticmethod
+    def _fromtimestamp(tstamp):
+        return datetime.fromtimestamp(tstamp)
+    
     @property
     def atime(self):
         """Access time.
         
         Access and modification times must be set together using Stat.amtime"""
         s = self._stat()
-        return s.st_atime
+        return self._fromtimestamp(s.st_atime)
 
     @property
     def mtime(self):
@@ -113,7 +123,7 @@ class Stats(object):
         
         Access and modification times must be set together using Stat.amtime"""
         s = self._stat()
-        return s.st_mtime
+        return self._fromtimestamp(s.st_mtime)
 
     @property
     def amtime(self):
@@ -123,14 +133,18 @@ class Stats(object):
 
     @amtime.setter
     def amtime(self, times):
-        times = (atime, mtime)
+        (atime, mtime) = times
+        if isinstance(atime, datetime):
+            atime = self._totimestamp(atime)
+        if isinstance(mtime, datetime):
+            mtime = self._totimestamp(mtime)
         os.utime(unicode(self._path), (atime, mtime))
         self._stat(True)
     
     @property
     def ctime(self):
         """Creation time"""
-        return self._stat().st_ctime
+        return self._fromtimestamp(self._stat().st_ctime)
 
 
 class _BaseRoot(object):
@@ -177,12 +191,13 @@ class _BaseRoot(object):
             raise NotImplementedError('__str__ is abstract')
 
         def __cmp__(self, other):
-            if isinstance(other, str):
+            if isinstance(other, str) or isinstance(other, unicode):
                 return -1
-            elif isinstance(other, BasePath._BaseRoot):
+            elif isinstance(other, _BaseRoot):
                 return cmp(str(self), str(other))
             else:
-                raise TypeError('Comparison not defined')
+                raise TypeError('Comparison not defined %s:"%s" %s:"%s"' 
+                            % (type(self), self, type(other), other))
 
         def __hash__(self):
             # This allows path objects to be hashable
@@ -300,7 +315,7 @@ class BasePath(tuple):
 
     def __repr__(self):
         # We want path, not the real class name.
-        return 'Path(%r)' % str(self)
+        return 'Path(%r)' % unicode(self)
 
     @property
     def isabs(self):
@@ -406,6 +421,12 @@ class BasePath(tuple):
         return tuple.__lt__(self, self.__class__(other))
     def __ne__(self, other):
         return tuple.__ne__(self, self.__class__(other))
+    
+    def __contains__(self, other):
+        """Treats self as a directory, and checks if 'other' is located 
+        in this directory, so Path('dir/file') in Path('dir') == True."""
+        other = self._Path(other)
+        return other[:len(self)] == self
         
 
     # ----------------------------------------------------------------
@@ -414,6 +435,10 @@ class BasePath(tuple):
     # --- Path transformation which use system calls
 
     def abspath(self):
+        """"Returns an absolute form of the current path.
+        
+        If the path is a relative path, it is appended to the current
+        working directory."""
         if not self:
             return self._Dir.cwd()
         if isinstance(self[0], self._OSBaseRoot):
@@ -462,7 +487,7 @@ class BasePath(tuple):
     def extension(self):
         return ''.join(self[-1].rsplit('.', 1)[1:])
 
-    def norm(self, user=True, vars=True, real=False):
+    def norm(self, user=True, vars=False, real=False):
         """Returns a Path object equivalent to self, but normalized
         with respect to case, separators, and (optionally) user
         and home variables."""
@@ -491,6 +516,8 @@ class BasePath(tuple):
         return Stats(self, usecache, followlinks)
     
     def exists(self):
+        """Returns True if the file exists on the hard drive,
+        otherwise false."""
         try:
             self.stat(True)
         except OSError:
@@ -528,6 +555,7 @@ class BasePath(tuple):
         else:
             return self._Path(self)
     
+    @property
     def ismount(self):
         return os.path.ismount(unicode(self))
 
@@ -563,7 +591,7 @@ class BasePath(tuple):
         name as self will be created in that directory.
         """
         dst = self.__class__(dst)
-        if dst.stat().isdir:
+        if dst.exists() and dst.stat().isdir:
             dst += self[-1]
         shutil.copyfile(unicode(self), unicode(dst))
         if copystat:
@@ -613,8 +641,10 @@ class BaseFile(BasePath):
         os.utime(unicode(self), None)
 
     def open(self, *args, **kwargs):
-        """Return a file object that can be read"""
-        return open(unicode(self))
+        """Return a file object that can be read or written to.
+        
+        Takes the same arguments as the built in 'open' command."""
+        return open(unicode(self), *args, **kwargs)
 
     def __add__(self, other):
         raise ValueError("File objects not supported as left operand")
@@ -794,6 +824,10 @@ class PosixPath(BasePath):
 
 
 class PosixFile(PosixPath, BaseFile):
+    """A representation of a path to a file.
+    
+    A File object is a Path object with extra methods specific
+    to files, such as open()."""
     def mkfifo(self, *args):
         return os.mkfifo(unicode(self), *args)
 
