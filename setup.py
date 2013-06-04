@@ -7,7 +7,7 @@ def getfile(fname):
 readme = getfile('README.txt').read()
 
 setup(name='fpath',
-      version='0.6',
+      version='0.7',
       description='Filesystem paths as objects',
       author='Wendell',
       author_email='wackywendell@gmail.com',
@@ -19,7 +19,9 @@ setup(name='fpath',
           'Topic :: System :: Filesystems',
           'Operating System :: POSIX',
           'Operating System :: Microsoft',
-          'License :: OSI Approved :: MIT License'
+          'License :: OSI Approved :: MIT License',
+          'Programming Language :: Python :: 2',
+          'Programming Language :: Python :: 3'
         ],
       license='MIT',
       long_description=readme
